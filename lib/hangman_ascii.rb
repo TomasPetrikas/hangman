@@ -2,6 +2,7 @@
 
 module HangmanASCII
   HANGMAN_PICS = [
+    "\n\n\n\n\n\n\n",
     "
 
 
