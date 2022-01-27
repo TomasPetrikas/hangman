@@ -203,11 +203,11 @@ class Game
 
     result = ''
     secret_word.split('').each do |char|
-      if @state[:letters_used].include?(char)
-        result += char
-      else
-        result += '_'
-      end
+      result += if @state[:letters_used].include?(char)
+                  char
+                else
+                  '_'
+                end
     end
 
     result
