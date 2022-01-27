@@ -15,7 +15,6 @@ class Player
     loop do
       print "\n#{@name}, enter your guess (a letter or word): "
       guess = gets.chomp.upcase
-      # puts ''
       return guess if guess.match?(/^[A-Z]+$/) && !state[:letters_used].include?(guess)
 
       puts 'Error: you already used that letter' if state[:letters_used].include?(guess)
@@ -49,6 +48,7 @@ class ComputerPlayer < Player
 
   def guess(state)
     # TODO
+    state[:letters_available].sample
   end
 
   private
@@ -242,13 +242,33 @@ class Game
   def mode2
     @p = Player.new('Player', @dictionary, is_guesser: false)
     @c = ComputerPlayer.new('Computer', is_guesser: true)
+
+    @state[:clue_word] = update_clue(@p.word)
+
+    while @state[:guesses_left].positive?
+      @display.print_game_state(@state, @c.name)
+      # p @p.word
+      guess = @c.guess(@state)
+      update_state(guess, @p.word)
+      sleep(1)
+
+      next if @state[:clue_word] != @p.word && guess != @p.word
+
+      @state[:clue_word] = @p.word
+      @display.print_game_state(@state, @c.name)
+      @display.win(@c, @p)
+      return
+    end
+
+    @display.print_game_state(@state, @c.name)
+    @display.loss(@c, @p)
   end
 end
 
 def play_game
   g = Game.new
   g.start
-  # repeat_game
+  repeat_game
 end
 
 def repeat_game
