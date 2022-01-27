@@ -42,19 +42,63 @@ class Player
 end
 
 class ComputerPlayer < Player
+  # https://en.wikipedia.org/wiki/Letter_frequency
+  # This is specifically for dictionaries, not general English text
+  LETTERS_BY_FREQUENCY = 'ESIARNTOLCDUGPMKHBYFVWZXQC'
+
   def initalize(name, dictionary = nil, is_guesser: true)
     super
   end
 
-  def guess(state)
-    # TODO
-    state[:letters_available].sample
+  # Computer player will never guess a whole word, it's technically just a
+  # time saver for humans
+  def guess(state, dictionary)
+    # Check if first turn
+    @possible_words = dictionary.clone if state[:letters_used].empty?
+
+    trim_possible_words(state[:clue_word])
+    # p @possible_words.length
+    # return @possible_words.first if @possible_words.length == 1
+
+    if @possible_words.length <= 100
+      possible_letters = []
+
+      @possible_words.each do |word|
+        word.split('').each do |char|
+          possible_letters << char unless possible_letters.include?(char)
+        end
+      end
+
+      possible_letters -= state[:letters_used]
+      # p possible_letters
+
+      LETTERS_BY_FREQUENCY.split('').each do |char|
+        return char if state[:letters_available].include?(char) && possible_letters.include?(char)
+      end
+    else
+      LETTERS_BY_FREQUENCY.split('').each do |char|
+        return char if state[:letters_available].include?(char)
+      end
+    end
   end
 
   private
 
   def generate_word(dictionary)
     dictionary.sample
+  end
+
+  def trim_possible_words(clue_word)
+    @possible_words.select! do |word|
+      keep_word = true
+      keep_word = false if word.length != clue_word.length
+
+      clue_word.split('').each_with_index do |char, i|
+        keep_word = false unless char == word[i] || char == '_'
+      end
+
+      keep_word
+    end
   end
 end
 
@@ -132,6 +176,8 @@ class Display
 end
 
 class Game
+  attr_reader :dictionary
+
   MAX_GUESSES = 10
   WORD_SIZE_MIN = 5
   WORD_SIZE_MAX = 12
@@ -248,7 +294,7 @@ class Game
     while @state[:guesses_left].positive?
       @display.print_game_state(@state, @c.name)
       # p @p.word
-      guess = @c.guess(@state)
+      guess = @c.guess(@state, @dictionary)
       update_state(guess, @p.word)
       sleep(1)
 
