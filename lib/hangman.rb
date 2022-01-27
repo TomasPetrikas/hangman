@@ -11,14 +11,15 @@ class Player
     @word = generate_word(dictionary) unless is_guesser
   end
 
-  def guess(letters_used)
+  def guess(state)
     loop do
       print "\n#{@name}, enter your guess (a letter or word): "
       guess = gets.chomp.upcase
       # puts ''
-      return guess if guess.match?(/^[A-Z]+$/) && !letters_used.include?(guess)
+      return guess if guess.match?(/^[A-Z]+$/) && !state[:letters_used].include?(guess)
 
-      puts 'Error: you already used that letter' if letters_used.include?(guess)
+      puts 'Error: you already used that letter' if state[:letters_used].include?(guess)
+      puts "Error: that's not a letter or word" unless guess.match?(/^[A-Z]+$/)
     end
   end
 
@@ -34,7 +35,8 @@ class Player
       if word.length.between?(Game::WORD_SIZE_MIN, Game::WORD_SIZE_MAX)
         puts "Error: That's not a word.\n\n"
       else
-        puts "Error: The word must be between #{Game::WORD_SIZE_MIN} and #{Game::WORD_SIZE_MAX} characters long.\n\n"
+        puts "Error: The word must be between #{Game::WORD_SIZE_MIN} and"\
+        " #{Game::WORD_SIZE_MAX} characters long.\n\n"
       end
     end
   end
@@ -43,6 +45,10 @@ end
 class ComputerPlayer < Player
   def initalize(name, dictionary = nil, is_guesser: true)
     super
+  end
+
+  def guess(state)
+    # TODO
   end
 
   private
@@ -69,22 +75,22 @@ class Display
     puts 'Oops, try again:'
   end
 
-  def print_ascii(guesses_left)
+  def print_game_state(state, player_name)
     clear_screen
-
-    return if guesses_left == Game::MAX_GUESSES
-
-    puts HANGMAN_PICS[Game::MAX_GUESSES - 1 - guesses_left]
+    print_ascii(state[:guesses_left])
+    print_clue_word(state[:clue_word])
+    print_guesses_left(player_name, state[:guesses_left])
+    print_letters_used(state[:letters_used])
   end
 
-  def print_guesses_left(name, guesses_left)
-    puts "#{name} has #{guesses_left} guesses remaining"
+  # If the word is guessed in time
+  def win(winning_player, losing_player)
+    puts "\n#{winning_player.name} wins! The secret word was #{losing_player.word}!\n\n"
   end
 
-  def print_letters_used(letters_used)
-    return if letters_used.length.zero?
-
-    puts "Letters used: #{letters_used.join(' ')}"
+  # If the guesser runs out of guesses
+  def loss(losing_player, winning_player)
+    puts "\n#{losing_player.name} loses! The secret word was #{winning_player.word}!\n\n"
   end
 
   private
@@ -105,6 +111,24 @@ class Display
     puts "1 - Guess the computer's word"
     puts '2 - Have the computer guess your word'
   end
+
+  def print_ascii(guesses_left)
+    puts HANGMAN_PICS[Game::MAX_GUESSES - guesses_left]
+  end
+
+  def print_clue_word(clue_word)
+    puts "\n#{clue_word.gsub(//, ' ').strip}"
+  end
+
+  def print_guesses_left(name, guesses_left)
+    puts "#{name} has #{guesses_left} guesses remaining"
+  end
+
+  def print_letters_used(letters_used)
+    return if letters_used.length.zero?
+
+    puts "Letters used: #{letters_used.join(' ')}"
+  end
 end
 
 class Game
@@ -113,10 +137,18 @@ class Game
   WORD_SIZE_MAX = 12
   LETTERS = ('A'..'Z').to_a
 
+  # @state is a hash meant to contain 4 things:
+  #
+  # 1. [:guesses_left] - an integer
+  # 2. [:letters_available] - an array
+  # 3. [:letters_used] - an array
+  # 4. [:clue_word] - a string (this comes a little later)
   def initialize
     @display = Display.new
-    @guesses_left = MAX_GUESSES
-    @letters_used = []
+    @state = {}
+    @state[:guesses_left] = MAX_GUESSES
+    @state[:letters_available] = LETTERS
+    @state[:letters_used] = []
 
     dictionary_file = File.open('dictionary.txt', 'r')
 
@@ -152,21 +184,58 @@ class Game
     end
   end
 
+  def update_state(guess_word, secret_word)
+    clue_updated = false
+    if guess_word.length == 1 && !@state[:letters_used].include?(guess_word)
+      @state[:letters_used] << guess_word
+      @state[:letters_available] -= [guess_word]
+
+      previous_clue_word = @state[:clue_word].clone
+      @state[:clue_word] = update_clue(secret_word)
+      clue_updated = true if previous_clue_word != @state[:clue_word]
+    end
+
+    @state[:guesses_left] -= 1 unless clue_updated || guess_word == secret_word
+  end
+
+  def update_clue(secret_word)
+    return '_' * secret_word.length if @state[:letters_used].empty?
+
+    result = ''
+    secret_word.split('').each do |char|
+      if @state[:letters_used].include?(char)
+        result += char
+      else
+        result += '_'
+      end
+    end
+
+    result
+  end
+
   # Guess the computer's word
   def mode1
     @p = Player.new('Player', is_guesser: true)
     @c = ComputerPlayer.new('Computer', @dictionary, is_guesser: false)
 
-    while @guesses_left.positive?
-      @display.print_ascii(@guesses_left)
-      # display word
-      @display.print_guesses_left(@p.name, @guesses_left)
-      @display.print_letters_used(@letters_used)
-      guess = @p.guess(@letters_used)
-      @letters_used << guess if guess.length == 1 && !@letters_used.include?(guess)
+    @state[:clue_word] = update_clue(@c.word)
 
-      @guesses_left -= 1
+    while @state[:guesses_left].positive?
+      @display.print_game_state(@state, @p.name)
+      # p @c.word
+      guess = @p.guess(@state)
+      update_state(guess, @c.word)
+
+      next if @state[:clue_word] != @c.word && guess != @c.word
+
+      @state[:clue_word] = @c.word
+      @display.print_game_state(@state, @p.name)
+      @display.win(@p, @c)
+      return
     end
+
+    @display.print_game_state(@state, @p.name)
+    @display.loss(@p, @c)
   end
 
   # Computer guesses your word
