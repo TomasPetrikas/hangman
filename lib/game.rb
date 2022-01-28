@@ -45,6 +45,8 @@ class Game
   # 3. [:letters_available] - an array
   # 4. [:letters_used] - an array
   # 5. [:clue_word] - a string (this comes a bit later)
+  #
+  # This should probably be its own class, but oh well
   def init_game_state
     @state = {}
     @state[:guesses_left] = MAX_GUESSES
