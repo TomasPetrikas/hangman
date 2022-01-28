@@ -6,7 +6,11 @@ You can try to guess a random word, or watch the computer try to guess *your* wo
 
 Includes saving and loading capabilities.
 
-<br>
+To run locally, try the following command in the project directory (assuming you have Ruby installed):
+
+**ruby lib/main.rb**
+
+***
 
 Dictionary is from here: https://www.scrapmaker.com/data/wordlists/twelve-dicts/5desk.txt
 
