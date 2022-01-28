@@ -44,18 +44,16 @@ end
 class ComputerPlayer < Player
   # https://en.wikipedia.org/wiki/Letter_frequency
   # This is specifically for dictionaries, not general English text
-  LETTERS_BY_FREQUENCY = 'ESIARNTOLCDUGPMKHBYFVWZXQC'
+  LETTERS_BY_FREQUENCY = 'ESIARNTOLCDUGPMKHBYFVWZXQJ'
 
-  def initalize(name, dictionary = nil, is_guesser: true)
+  def initialize(name, dictionary, is_guesser: true)
     super
+    @possible_words = dictionary if is_guesser
   end
 
   # Computer player will never guess a whole word, it's technically just a
   # time saver for humans
-  def guess(state, dictionary)
-    # Check if first turn
-    @possible_words = dictionary.clone if state[:letters_used].empty?
-
+  def guess(state)
     trim_possible_words(state[:clue_word])
     # p @possible_words.length
     # return @possible_words.first if @possible_words.length == 1
@@ -69,11 +67,11 @@ class ComputerPlayer < Player
         end
       end
 
-      possible_letters -= state[:letters_used]
+      possible_letters = possible_letters.intersection(state[:letters_available])
       # p possible_letters
 
       LETTERS_BY_FREQUENCY.split('').each do |char|
-        return char if state[:letters_available].include?(char) && possible_letters.include?(char)
+        return char if possible_letters.include?(char)
       end
     else
       LETTERS_BY_FREQUENCY.split('').each do |char|
@@ -287,14 +285,14 @@ class Game
   # Computer guesses your word
   def mode2
     @p = Player.new('Player', @dictionary, is_guesser: false)
-    @c = ComputerPlayer.new('Computer', is_guesser: true)
+    @c = ComputerPlayer.new('Computer', @dictionary, is_guesser: true)
 
     @state[:clue_word] = update_clue(@p.word)
 
     while @state[:guesses_left].positive?
       @display.print_game_state(@state, @c.name)
       # p @p.word
-      guess = @c.guess(@state, @dictionary)
+      guess = @c.guess(@state)
       update_state(guess, @p.word)
       sleep(1)
 
