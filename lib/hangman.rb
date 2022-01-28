@@ -18,7 +18,7 @@ class Player
       print "\n#{@name}, enter your guess (a letter or word): "
       guess = gets.chomp.upcase
       return guess if guess.match?(/^[A-Z]+$/) && !state[:letters_used].include?(guess)
-      return guess if ['/SAVE', '/S'].include?(guess)
+      return guess if Game::SAVE_ALIAS.include?(guess)
 
       puts 'Error: you already used that letter' if state[:letters_used].include?(guess)
       puts "Error: that's not a letter or word" unless guess.match?(/^[A-Z]+$/)
@@ -169,9 +169,10 @@ class Display
   def print_tip(state, player)
     # Do nothing unless human player's first turn
     return unless player.instance_of?(Player) && state[:turn].zero?
-    
+
     clear_screen
-    puts 'Tip: You can save the game by typing /save or /s.'
+    puts "Tip: You can save the game by typing #{Game::SAVE_ALIAS[0].downcase}"\
+    " or #{Game::SAVE_ALIAS[1].downcase}."
     sleep(3)
   end
 
@@ -202,11 +203,16 @@ class Game
   WORD_SIZE_MAX = 12
   LETTERS = ('A'..'Z').to_a
 
+  PATH_DICTIONARY = "#{File.dirname(__FILE__)}/../dictionary.txt"
+  PATH_SAVE = "#{File.dirname(__FILE__)}/../save_data.yml"
+
+  SAVE_ALIAS = ['/SAVE', '/S'].freeze
+
   def initialize
     @display = Display.new
     init_game_state
 
-    dictionary_file = File.open("#{File.dirname(__FILE__)}/../dictionary.txt", 'r')
+    dictionary_file = File.open(PATH_DICTIONARY, 'r')
 
     @dictionary = dictionary_file.readlines
     @dictionary.map! { |word| word.chomp.upcase }
@@ -255,12 +261,12 @@ class Game
   end
 
   def save
-    File.open("#{File.dirname(__FILE__)}/../save_data.yml", 'w') { |f| f.write(to_yaml) }
+    File.open(PATH_SAVE, 'w') { |f| f.write(to_yaml) }
   end
 
   def self.load
-    if File.exist?("#{File.dirname(__FILE__)}/../save_data.yml")
-      YAML.load(File.read("#{File.dirname(__FILE__)}/../save_data.yml"))
+    if File.exist?(PATH_SAVE)
+      YAML.load(File.read(PATH_SAVE))
     else
       puts 'File not found.'
       sleep(1)
@@ -328,42 +334,42 @@ class Game
     play(@c, @p)
   end
 
-  # p1 is guesser, p2 is the one being guessed
-  def play(p1, p2)
+  # player1 is guesser, player2 is the one being guessed
+  def play(player1, player2)
     while @state[:guesses_left].positive?
-      @display.print_game_state(@state, p1)
-      # p p2.word
-      guess = p1.guess(@state)
+      @display.print_game_state(@state, player1)
+      # p player2.word
+      guess = player1.guess(@state)
 
-      if ['/SAVE', '/S'].include?(guess)
+      if SAVE_ALIAS.include?(guess)
         save
         @display.game_saved
       else
-        update_state(guess, p2.word)
+        update_state(guess, player2.word)
       end
 
-      sleep(1) if p1.instance_of?(ComputerPlayer)
+      sleep(1) if player1.instance_of?(ComputerPlayer)
 
-      next if @state[:clue_word] != p2.word && guess != p2.word
+      next if @state[:clue_word] != player2.word && guess != player2.word
 
-      @state[:clue_word] = p2.word
-      @display.print_game_state(@state, p1)
-      @display.win(p1, p2)
+      @state[:clue_word] = player2.word
+      @display.print_game_state(@state, player1)
+      @display.win(player1, player2)
       return
     end
 
-    @display.print_game_state(@state, p1)
-    @display.loss(p1, p2)
+    @display.print_game_state(@state, player1)
+    @display.loss(player1, player2)
   end
 end
 
-def play_game(g)
-  if g.start == 'load'
-    g = Game.load
+def play_game(game)
+  if game.start == 'load'
+    game = Game.load
 
     # If file is found upon loading
-    if g.instance_of?(Game)
-      play_game(g)
+    if game.instance_of?(Game)
+      play_game(game)
     # If file is not found
     else
       play_game(Game.new)
