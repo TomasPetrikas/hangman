@@ -2,6 +2,8 @@
 
 require_relative 'hangman_ascii'
 
+require 'yaml'
+
 class Player
   attr_reader :name, :word
 
@@ -16,6 +18,7 @@ class Player
       print "\n#{@name}, enter your guess (a letter or word): "
       guess = gets.chomp.upcase
       return guess if guess.match?(/^[A-Z]+$/) && !state[:letters_used].include?(guess)
+      return guess if ['/SAVE', '/S'].include?(guess)
 
       puts 'Error: you already used that letter' if state[:letters_used].include?(guess)
       puts "Error: that's not a letter or word" unless guess.match?(/^[A-Z]+$/)
@@ -117,11 +120,18 @@ class Display
     puts 'Oops, try again:'
   end
 
-  def print_game_state(state, player_name)
+  def game_saved
+    puts 'Your game has been saved.'
+    sleep(1)
+  end
+
+  def print_game_state(state, player)
+    print_tip(state, player)
+
     clear_screen
     print_ascii(state[:guesses_left])
     print_clue_word(state[:clue_word])
-    print_guesses_left(player_name, state[:guesses_left])
+    print_guesses_left(player.name, state[:guesses_left])
     print_letters_used(state[:letters_used])
   end
 
@@ -152,6 +162,17 @@ class Display
     puts 'Please make a selection:'
     puts "1 - Guess the computer's word"
     puts '2 - Have the computer guess your word'
+    puts '3 - Load a previous save'
+    puts '4 - Quit'
+  end
+
+  def print_tip(state, player)
+    # Do nothing unless human player's first turn
+    return unless player.instance_of?(Player) && state[:turn].zero?
+    
+    clear_screen
+    puts 'Tip: You can save the game by typing /save or /s.'
+    sleep(3)
   end
 
   def print_ascii(guesses_left)
@@ -181,20 +202,11 @@ class Game
   WORD_SIZE_MAX = 12
   LETTERS = ('A'..'Z').to_a
 
-  # @state is a hash meant to contain 4 things:
-  #
-  # 1. [:guesses_left] - an integer
-  # 2. [:letters_available] - an array
-  # 3. [:letters_used] - an array
-  # 4. [:clue_word] - a string (this comes a little later)
   def initialize
     @display = Display.new
-    @state = {}
-    @state[:guesses_left] = MAX_GUESSES
-    @state[:letters_available] = LETTERS
-    @state[:letters_used] = []
+    init_game_state
 
-    dictionary_file = File.open('dictionary.txt', 'r')
+    dictionary_file = File.open("#{File.dirname(__FILE__)}/../dictionary.txt", 'r')
 
     @dictionary = dictionary_file.readlines
     @dictionary.map! { |word| word.chomp.upcase }
@@ -208,27 +220,66 @@ class Game
     # end
   end
 
+  # @state is a hash meant to contain 5 things:
+  #
+  # 1. [:guesses_left] - an integer
+  # 2. [:turn] - an integer
+  # 3. [:letters_available] - an array
+  # 4. [:letters_used] - an array
+  # 5. [:clue_word] - a string (this comes a bit later)
+  def init_game_state
+    @state = {}
+    @state[:guesses_left] = MAX_GUESSES
+    @state[:turn] = 0
+    @state[:letters_available] = LETTERS
+    @state[:letters_used] = []
+  end
+
   def start
+    # Check if we just loaded from a save
+    unless defined?(@p).nil?
+      play(@p, @c)
+      return
+    end
+
+    # Continue if not
     @display.clear_screen
     @display.intro
-    @game_mode = game_mode
+    @mode = mode
 
-    mode1 if @game_mode == 1
-    mode2 if @game_mode == 2
+    mode1 if @mode == 1
+    mode2 if @mode == 2
+    return 'load' if @mode == 3
+
+    exit if @mode == 4
+  end
+
+  def save
+    File.open("#{File.dirname(__FILE__)}/../save_data.yml", 'w') { |f| f.write(to_yaml) }
+  end
+
+  def self.load
+    if File.exist?("#{File.dirname(__FILE__)}/../save_data.yml")
+      YAML.load(File.read("#{File.dirname(__FILE__)}/../save_data.yml"))
+    else
+      puts 'File not found.'
+      sleep(1)
+    end
   end
 
   private
 
-  def game_mode
+  def mode
     loop do
-      mode = gets.chomp.to_i
-      return mode if [1, 2].include?(mode)
+      choice = gets.chomp.to_i
+      return choice if (1..4).to_a.include?(choice)
 
       @display.try_again
     end
   end
 
   def update_state(guess_word, secret_word)
+    @state[:turn] += 1
     clue_updated = false
     if guess_word.length == 1 && !@state[:letters_used].include?(guess_word)
       @state[:letters_used] << guess_word
@@ -264,22 +315,7 @@ class Game
 
     @state[:clue_word] = update_clue(@c.word)
 
-    while @state[:guesses_left].positive?
-      @display.print_game_state(@state, @p.name)
-      # p @c.word
-      guess = @p.guess(@state)
-      update_state(guess, @c.word)
-
-      next if @state[:clue_word] != @c.word && guess != @c.word
-
-      @state[:clue_word] = @c.word
-      @display.print_game_state(@state, @p.name)
-      @display.win(@p, @c)
-      return
-    end
-
-    @display.print_game_state(@state, @p.name)
-    @display.loss(@p, @c)
+    play(@p, @c)
   end
 
   # Computer guesses your word
@@ -289,35 +325,56 @@ class Game
 
     @state[:clue_word] = update_clue(@p.word)
 
+    play(@c, @p)
+  end
+
+  # p1 is guesser, p2 is the one being guessed
+  def play(p1, p2)
     while @state[:guesses_left].positive?
-      @display.print_game_state(@state, @c.name)
-      # p @p.word
-      guess = @c.guess(@state)
-      update_state(guess, @p.word)
-      sleep(1)
+      @display.print_game_state(@state, p1)
+      # p p2.word
+      guess = p1.guess(@state)
 
-      next if @state[:clue_word] != @p.word && guess != @p.word
+      if ['/SAVE', '/S'].include?(guess)
+        save
+        @display.game_saved
+      else
+        update_state(guess, p2.word)
+      end
 
-      @state[:clue_word] = @p.word
-      @display.print_game_state(@state, @c.name)
-      @display.win(@c, @p)
+      sleep(1) if p1.instance_of?(ComputerPlayer)
+
+      next if @state[:clue_word] != p2.word && guess != p2.word
+
+      @state[:clue_word] = p2.word
+      @display.print_game_state(@state, p1)
+      @display.win(p1, p2)
       return
     end
 
-    @display.print_game_state(@state, @c.name)
-    @display.loss(@c, @p)
+    @display.print_game_state(@state, p1)
+    @display.loss(p1, p2)
   end
 end
 
-def play_game
-  g = Game.new
-  g.start
+def play_game(g)
+  if g.start == 'load'
+    g = Game.load
+
+    # If file is found upon loading
+    if g.instance_of?(Game)
+      play_game(g)
+    # If file is not found
+    else
+      play_game(Game.new)
+    end
+  end
   repeat_game
 end
 
 def repeat_game
   puts "Would you like to play again? Enter 'y' for yes or 'n' for no: "
-  gets.chomp.downcase == 'y' ? play_game : return
+  gets.chomp.downcase == 'y' ? play_game(Game.new) : exit
 end
 
-play_game
+play_game(Game.new)
