@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'color'
 require_relative 'hangman_ascii'
 
 # Handles most of the screen output
@@ -7,7 +8,7 @@ class Display
   include HangmanASCII
 
   def intro
-    puts "Welcome to Hangman!\n\n"
+    puts "Welcome to #{'Hangman'.cyan.bold}!\n\n"
     rules
     selection
   end
@@ -60,10 +61,10 @@ class Display
 
   def selection
     puts 'Please make a selection:'
-    puts "1 - Guess the computer's word"
-    puts '2 - Have the computer guess your word'
-    puts '3 - Load a previous save'
-    puts '4 - Quit'
+    puts "#{'1'.cyan.bold} - Guess the computer's word"
+    puts "#{'2'.cyan.bold} - Have the computer guess your word"
+    puts "#{'3'.cyan.bold} - Load a previous save"
+    puts "#{'4'.cyan.bold} - Quit"
   end
 
   def print_tip(state, player)
@@ -71,8 +72,8 @@ class Display
     return unless player.instance_of?(Player) && state[:turn].zero?
 
     clear_screen
-    puts "Tip: You can save the game by typing #{Game::SAVE_ALIAS[0].downcase}"\
-    " or #{Game::SAVE_ALIAS[1].downcase}."
+    puts "Tip: You can save the game by typing #{Game::SAVE_ALIAS[0].downcase.cyan.bold}"\
+    " or #{Game::SAVE_ALIAS[1].downcase.cyan.bold}."
     sleep(3)
   end
 
@@ -85,12 +86,12 @@ class Display
   end
 
   def print_guesses_left(name, guesses_left)
-    puts "#{name} has #{guesses_left} guesses remaining"
+    puts "#{name} has #{guesses_left.to_s.cyan.bold} guesses remaining"
   end
 
   def print_letters_used(letters_used)
     return if letters_used.length.zero?
 
-    puts "Letters used: #{letters_used.join(' ')}"
+    puts "Letters used: #{letters_used.join(' ').red.bold}"
   end
 end
